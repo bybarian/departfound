@@ -1,0 +1,6 @@
+{
+  "name": "數位輔助科基金管理平台",
+  "description": "協助使用者用紙手動或語音輸入消費資料，自動產生科技基金報銷用的消費紀錄表與參與人員明細表，並支援多種匯出與備份功能。",
+  "requestFramePermissions": ["microphone", "camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

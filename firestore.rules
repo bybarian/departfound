@@ -1,0 +1,55 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global safety net catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Reusable, hardened helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isEmailVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // 2. Main Fortress rules for user paths
+    match /users/{userId} {
+      allow get, write: if isOwner(userId) && isValidId(userId) && isEmailVerified();
+
+      // Expense Records Sub-collection
+      match /records/{recordId} {
+        allow read: if isOwner(userId);
+        allow write: if isOwner(userId) && isValidId(userId) && isValidId(recordId) && isEmailVerified();
+      }
+
+      // Details Sub-collection
+      match /details/{detailId} {
+        allow read: if isOwner(userId);
+        allow write: if isOwner(userId) && isValidId(userId) && isValidId(detailId) && isEmailVerified();
+      }
+
+      // People Custom list
+      match /people/{personId} {
+        allow read: if isOwner(userId);
+        allow write: if isOwner(userId) && isValidId(userId) && isValidId(personId) && isEmailVerified();
+      }
+
+      // Settings doc
+      match /settings/{docName} {
+        allow read: if isOwner(userId);
+        allow write: if isOwner(userId) && isValidId(userId) && isValidId(docName) && isEmailVerified();
+      }
+    }
+  }
+}

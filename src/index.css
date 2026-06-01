@@ -1,0 +1,263 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #008236;
+  --color-success: #10b981;
+  --color-border: #e2e8f0;
+}
+
+:root {
+  --primary-color: #008236;
+  --success-color: #10b981;
+  --border-color: #e2e8f0;
+}
+
+body {
+  background-color: #f8fafc;
+  color: #1e293b;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+}
+
+/* Custom card style matching Geometric Balance exactly */
+.geo-card {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.geo-card-header {
+  padding: 14px 18px;
+  border-bottom: 1px solid #005a24;
+  background-color: #008236; /* Theme Primary Green (#008236) background */
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: #ffffff;
+}
+
+.geo-card-title {
+  font-size: 0.875rem;
+  font-weight: 850;
+  color: #ffffff; /* Ultra high contrast white */
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Rounded inputs and buttons */
+.geo-input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  font-size: 0.8125rem;
+  background-color: #ffffff;
+  color: #334155;
+  transition: all 0.15s ease-in-out;
+}
+
+.geo-input:focus {
+  outline: none;
+  border-color: #008236;
+  box-shadow: 0 0 0 2px rgba(0, 130, 54, 0.1);
+}
+
+.geo-btn-primary {
+  background-color: #008236;
+  color: #ffffff;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 4px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+}
+
+.geo-btn-primary:hover {
+  background-color: #006a2c;
+}
+
+.geo-btn-outline {
+  background-color: #ffffff;
+  color: #64748b;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 6px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+}
+
+.geo-btn-outline:hover {
+  background-color: #f8fafc;
+  color: #334155;
+  border-color: #cbd5e1;
+}
+
+/* Styled table matching Geometric Balance */
+.geo-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.geo-table th {
+  position: sticky;
+  top: 0;
+  background-color: #f8fafc;
+  border-bottom: 2px solid #e2e8f0;
+  padding: 10px 14px;
+  text-align: left;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  z-index: 5;
+}
+
+.geo-table td {
+  padding: 10px 14px;
+  border-bottom: 1px solid #e2e8f0;
+  font-size: 0.75rem;
+}
+
+.geo-badge {
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-size: 0.625rem;
+  font-weight: 700;
+}
+
+.geo-badge-success {
+  background-color: #dcfce7;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+
+.geo-badge-info {
+  background-color: #dbeafe;
+  color: #1e40af;
+  border: 1px solid #bfdbfe;
+}
+
+.geo-badge-slate {
+  background-color: #f1f5f9;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+}
+
+/* Compact A4 table cells only inside printed/preview output */
+#print-preview-paper table th,
+#print-area table th {
+  padding: 6px 10px !important;
+  font-size: 11px !important;
+  line-height: 1.25 !important;
+}
+
+#print-preview-paper table td,
+#print-area table td {
+  padding: 5px 10px !important;
+  font-size: 11px !important;
+  line-height: 1.25 !important;
+}
+
+/* Print CSS Media Query for high-fidelity A4 document saves */
+@media print {
+  html, body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    width: 100% !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Base visibility rule to hide any stray floating elements */
+  body * {
+    visibility: hidden;
+  }
+
+  /* Selectively make the print block and its parent tree visible */
+  #root, 
+  .min-h-screen, 
+  #pdf-export-overlay, 
+  #print-area, 
+  #print-area * {
+    visibility: visible !important;
+  }
+
+  /* Hide the actual header, main content, footer, and the modal configuration panel from occupying space */
+  header, 
+  main, 
+  footer, 
+  #pdf-setting-container {
+    display: none !important;
+    height: 0 !important;
+    overflow: hidden !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+  }
+
+  /* Undo absolute positioning and fixed sizes on parents so it wraps and flows across multi-pages */
+  #root,
+  .min-h-screen,
+  #pdf-export-overlay {
+    display: block !important;
+    position: static !important;
+    height: auto !important;
+    min-height: 0 !important;
+    width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    overflow: visible !important;
+  }
+
+  /* Ensure our dedicated print container is displayed in normal flow */
+  #print-area {
+    display: block !important;
+    position: relative !important;
+    width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    overflow: visible !important;
+  }
+
+  /* Prevent page breaks inside critical elements like rows or tables */
+  tr {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+  
+  tbody {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  /* Page break utility */
+  .page-break-before {
+    page-break-before: always !important;
+    break-before: page !important;
+    display: block !important;
+    height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  
+  @page {
+    size: A4 portrait;
+    margin: 15mm;
+  }
+}
+

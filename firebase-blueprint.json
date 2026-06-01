@@ -1,0 +1,71 @@
+{
+  "entities": {
+    "ExpenseRecord": {
+      "title": "ExpenseRecord",
+      "description": "Individual tech fund expense record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "category": { "type": "string" },
+        "amount": { "type": "integer" },
+        "remark": { "type": "string" }
+      },
+      "required": ["id", "date", "category", "amount"]
+    },
+    "AttendeeDetail": {
+      "title": "AttendeeDetail",
+      "description": "Calculated attendee details for an expense record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "category": { "type": "string" },
+        "amount": { "type": "integer" },
+        "attendees": { "type": "array" },
+        "count": { "type": "integer" },
+        "average": { "type": "integer" }
+      },
+      "required": ["id", "date", "category", "amount", "attendees", "count", "average"]
+    },
+    "Person": {
+      "title": "Person",
+      "description": "Department member for drawing",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "isRequired": { "type": "boolean" }
+      },
+      "required": ["id", "name", "isActive", "isRequired"]
+    },
+    "UserSettings": {
+      "title": "UserSettings",
+      "description": "User specific settings like meal standard cost",
+      "type": "object",
+      "properties": {
+        "mealUnitCost": { "type": "integer" }
+      },
+      "required": ["mealUnitCost"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/records/{recordId}": {
+      "schema": "ExpenseRecord",
+      "description": "User private expense records"
+    },
+    "/users/{userId}/details/{detailId}": {
+      "schema": "AttendeeDetail",
+      "description": "User private details records"
+    },
+    "/users/{userId}/people/{personId}": {
+      "schema": "Person",
+      "description": "User custom drawing roster"
+    },
+    "/users/{userId}/settings/general": {
+      "schema": "UserSettings",
+      "description": "User private settings configuration"
+    }
+  }
+}
