@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Camera, Upload, Image as ImageIcon, Sparkles, RefreshCw, Check, X, Loader2, Calendar, DollarSign, Tag, FileText, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Camera, Upload, Image as ImageIcon, Sparkles, RefreshCw, Check, X, Loader2, Calendar, DollarSign, Tag, FileText, AlertTriangle, CheckCircle2, Lock, Unlock } from 'lucide-react';
 import { ExpenseCategory, ExpenseRecord } from '../types';
 
 interface ReceiptScannerProps {
@@ -9,6 +9,16 @@ interface ReceiptScannerProps {
 }
 
 export default function ReceiptScanner({ onAddRecord, onAutoFillForm, currentYear }: ReceiptScannerProps) {
+  // Passcode security checks
+  const [isUnlocked, setIsUnlocked] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('ocr_unlocked') === 'true';
+    }
+    return false;
+  });
+  const [passcode, setPasscode] = useState('');
+  const [passcodeError, setPasscodeError] = useState('');
+
   // Mode selection or capture options
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -45,12 +55,30 @@ export default function ReceiptScanner({ onAddRecord, onAutoFillForm, currentYea
     };
   }, []);
 
+  // Dynamically bind active stream to video element when it mounts and becomes active
+  useEffect(() => {
+    if (isCameraActive && videoRef.current && streamRef.current) {
+      console.log("Binding camera stream to video element dynamically...");
+      const video = videoRef.current;
+      video.srcObject = streamRef.current;
+      video.play().catch(e => {
+        console.error("Video play failed on state change:", e);
+      });
+    }
+  }, [isCameraActive]);
+
   // Launch device Web Camera interface
   const startCamera = async () => {
     setErrorMsg('');
     setSuccessInfo(null);
     setImagePreview(null);
     setShowResultPanel(false);
+    
+    // Safety check for browser compatibility or iframe sandbox limitations
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setErrorMsg("⚠️ 瀏覽器安全性規範限制：\n此瀏覽器目前不支援或未開放直接存取相機鏡頭（可能是因為在內嵌 Iframe 中執行，或非安全網址 HTTPS 協定）。\n\n💡 解決方案：\n1. 請點選右上角「在新分頁開啟/Open in new tab」圖示，以獨立網址開啟即可完美操作相機拍照！\n2. 或者，直接使用右側「上傳發票/收據照片」，您可直接於系統選單中選擇「使用相機拍照」，此方式 100% 成功且不受任何權限限制。");
+      return;
+    }
     
     try {
       let stream: MediaStream;
@@ -83,6 +111,7 @@ export default function ReceiptScanner({ onAddRecord, onAutoFillForm, currentYea
       }
       
       streamRef.current = stream;
+      setIsCameraActive(true);
       
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
@@ -91,7 +120,6 @@ export default function ReceiptScanner({ onAddRecord, onAutoFillForm, currentYea
           console.error("Video element play failed:", e);
         });
       }
-      setIsCameraActive(true);
     } catch (err: any) {
       console.error("Camera access error:", err);
       if (err.name === 'NotAllowedError' || err.message?.includes('Permission denied')) {
@@ -252,6 +280,27 @@ export default function ReceiptScanner({ onAddRecord, onAutoFillForm, currentYea
     setImagePreview(null);
   };
 
+  const handleVerifyPasscode = () => {
+    if (passcode === '00000') {
+      setIsUnlocked(true);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('ocr_unlocked', 'true');
+      }
+      setPasscodeError('');
+    } else {
+      setPasscodeError('❌ 密碼不正確，提示：密碼為 00000！');
+    }
+  };
+
+  const handleLockScanner = () => {
+    setIsUnlocked(false);
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('ocr_unlocked');
+    }
+    setPasscode('');
+    handleResetScanner();
+  };
+
   const handleResetScanner = () => {
     stopCamera();
     setImagePreview(null);
@@ -269,33 +318,92 @@ export default function ReceiptScanner({ onAddRecord, onAutoFillForm, currentYea
           <span>相機掃描 / 發票上傳自動辨識</span>
         </h2>
         
-        {(imagePreview || showResultPanel || isCameraActive) && (
-          <button
-            type="button"
-            onClick={handleResetScanner}
-            className="text-xs font-semibold text-emerald-100 hover:text-white bg-white/10 hover:bg-white/20 px-2 py-1 rounded border border-white/20 transition-colors cursor-pointer flex items-center gap-1"
-          >
-            <RefreshCw className="w-3 h-3" />
-            <span>重新掃描</span>
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {isUnlocked && (
+            <button
+              type="button"
+              onClick={handleLockScanner}
+              title="重新鎖定 AI 辨識"
+              className="text-[10px] sm:text-xs font-semibold text-rose-200 hover:text-white bg-rose-950/20 hover:bg-rose-900/40 px-2 py-1 rounded border border-rose-800/30 transition-colors cursor-pointer flex items-center gap-1"
+            >
+              <Lock className="w-3 h-3 text-rose-300" />
+              <span>重新鎖定</span>
+            </button>
+          )}
+
+          {(imagePreview || showResultPanel || isCameraActive) && (
+            <button
+              type="button"
+              onClick={handleResetScanner}
+              className="text-xs font-semibold text-emerald-100 hover:text-white bg-white/10 hover:bg-white/20 px-2 py-1 rounded border border-white/20 transition-colors cursor-pointer flex items-center gap-1"
+            >
+              <RefreshCw className="w-3 h-3" />
+              <span>重新掃描</span>
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="p-5 flex-1 flex flex-col justify-center space-y-4">
-        {/* Alerts & Feedbacks */}
-        {errorMsg && (
-          <div className="p-3 bg-rose-50 text-rose-700 text-[11px] font-bold rounded border border-rose-100 flex items-start gap-1.5">
-            <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
-            <span className="leading-snug whitespace-pre-line">{errorMsg}</span>
+        {!isUnlocked ? (
+          <div className="p-6 bg-slate-50 border border-slate-200 rounded-xl space-y-4 text-center">
+            <div className="mx-auto w-12 h-12 rounded-full bg-emerald-50 flex items-center justify-center text-[#008236] mb-2 border border-emerald-100">
+              <Lock className="w-5 h-5 animate-pulse" />
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-sm font-extrabold text-slate-800">🔐 進階 AI 辨識安全鎖</h3>
+              <p className="text-[11px] text-slate-500 font-semibold leading-relaxed">
+                本項目使用 Gemini AI 行動發票文字與摘要關聯識別，<br/>為防止額度超出負載，請鍵入系統啟用密碼：
+              </p>
+            </div>
+            <div className="flex justify-center gap-2 max-w-xs mx-auto pt-1">
+              <input
+                type="password"
+                maxLength={5}
+                value={passcode}
+                onChange={(e) => {
+                  setPasscode(e.target.value);
+                  setPasscodeError('');
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleVerifyPasscode();
+                  }
+                }}
+                placeholder="請輸入 5 位數啟用密碼"
+                className="w-full text-center text-xs font-extrabold tracking-[0.3em] py-2 px-3 bg-white border border-slate-300 rounded-lg focus:border-[#008236] focus:outline-none focus:ring-0"
+              />
+              <button
+                type="button"
+                onClick={handleVerifyPasscode}
+                className="bg-[#008236] hover:bg-[#006228] text-white font-extrabold text-xs px-4 py-2 rounded-lg transition-colors cursor-pointer shrink-0"
+              >
+                驗證啟用
+              </button>
+            </div>
+            {passcodeError && (
+              <p className="text-[10px] font-bold text-rose-605 animate-bounce">{passcodeError}</p>
+            )}
+            <div className="text-[10px] text-slate-400 font-medium pt-2 border-t border-slate-200/50">
+              💡 應系統安全限制，若需獲取此解鎖密碼請洽您的協辦或系統管理人員。
+            </div>
           </div>
-        )}
+        ) : (
+          <>
+            {/* Alerts & Feedbacks */}
+            {errorMsg && (
+              <div className="p-3 bg-rose-50 text-rose-700 text-[11px] font-bold rounded border border-rose-100 flex items-start gap-1.5">
+                <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+                <span className="leading-snug whitespace-pre-line">{errorMsg}</span>
+              </div>
+            )}
 
-        {successInfo && (
-          <div className="p-3 bg-emerald-50 text-[#008236] text-[11px] font-bold rounded border border-emerald-100 flex items-start gap-1.5">
-            <CheckCircle2 className="w-4 h-4 text-[#008236] shrink-0 mt-0.5" />
-            <span className="leading-snug">{successInfo}</span>
-          </div>
-        )}
+            {successInfo && (
+              <div className="p-3 bg-emerald-50 text-[#008236] text-[11px] font-bold rounded border border-emerald-100 flex items-start gap-1.5">
+                <CheckCircle2 className="w-4 h-4 text-[#008236] shrink-0 mt-0.5" />
+                <span className="leading-snug">{successInfo}</span>
+              </div>
+            )}
 
         {/* Live Camera Stream Interface */}
         {isCameraActive && (
@@ -498,6 +606,8 @@ export default function ReceiptScanner({ onAddRecord, onAutoFillForm, currentYea
               </button>
             </div>
           </div>
+        )}
+          </>
         )}
       </div>
 

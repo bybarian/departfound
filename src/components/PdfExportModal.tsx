@@ -35,10 +35,15 @@ export default function PdfExportModal({
   const [teachingConf, setTeachingConf] = useState(true);
   const [otherConf, setOtherConf] = useState(true);
 
-  // Auto-detect a reasonable report date from the latest transaction if available
+  // Date range filtering states
+  const [filterByDate, setFilterByDate] = useState(false);
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+
+  // Auto-detect a reasonable report date and full range from the latest transaction if available
   useEffect(() => {
     if (records.length > 0) {
-      // Sort to get the latest date
+      // Sort to get the latest date for reportDate
       const sortedDates = [...records]
         .map(r => r.date)
         .filter(Boolean)
@@ -48,16 +53,32 @@ export default function PdfExportModal({
         const latest = sortedDates[0]; // e.g. "2024-12-18" or "2024/12/18"
         setReportDate(latest.replace(/-/g, '.'));
       }
+
+      // Auto-detect full date range
+      const dates = records.map(r => r.date).filter(Boolean);
+      if (dates.length > 0) {
+        const sorted = [...dates].sort();
+        setStartDate(sorted[0]);
+        setEndDate(sorted[sorted.length - 1]);
+      }
     }
   }, [records]);
 
   if (!isOpen) return null;
 
-  const totalAmount = records.reduce((sum, r) => sum + r.amount, 0);
+  const filteredRecords = filterByDate
+    ? records.filter(r => r.date >= startDate && r.date <= endDate)
+    : records;
+
+  const filteredDetails = filterByDate
+    ? details.filter(d => d.date >= startDate && d.date <= endDate)
+    : details;
+
+  const totalAmount = filteredRecords.reduce((sum, r) => sum + r.amount, 0);
 
   // Chronologically sorted records & details
-  const sortedRecords = [...records].sort((a, b) => a.date.localeCompare(b.date));
-  const sortedDetails = [...details].sort((a, b) => a.date.localeCompare(b.date));
+  const sortedRecords = [...filteredRecords].sort((a, b) => a.date.localeCompare(b.date));
+  const sortedDetails = [...filteredDetails].sort((a, b) => a.date.localeCompare(b.date));
 
   // Extract short date format "MM/DD"
   const getShortDate = (dateStr: string) => {
@@ -72,6 +93,10 @@ export default function PdfExportModal({
     }
     return dateStr;
   };
+
+  const displayPeriod = filterByDate && startDate && endDate
+    ? `${startDate.replace(/-/g, '/')} ~ ${endDate.replace(/-/g, '/')}`
+    : reportDate;
 
   const isInIframe = typeof window !== 'undefined' && window.self !== window.top;
 
@@ -151,6 +176,46 @@ export default function PdfExportModal({
                     <span>僅匯出「與會人員表」</span>
                   </label>
                 </div>
+              </div>
+
+              {/* Date Filter Selection Block */}
+              <div className="bg-emerald-50/40 p-3 rounded-lg border border-emerald-100/70 space-y-2">
+                <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-[#008236] select-none">
+                  <input
+                    type="checkbox"
+                    checked={filterByDate}
+                    onChange={(e) => setFilterByDate(e.target.checked)}
+                    className="rounded text-[#008236] focus:ring-[#008236] border-slate-300 w-3.5 h-3.5 cursor-pointer"
+                  />
+                  <span>📅 篩選特定報支日期範圍</span>
+                </label>
+                {filterByDate && (
+                  <div className="space-y-1.5 animate-fade-in text-[11px] text-slate-700">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <span className="block text-[9px] font-bold text-slate-400 mb-0.5 uppercase tracking-wider">起始日期</span>
+                        <input
+                          type="date"
+                          value={startDate}
+                          onChange={(e) => setStartDate(e.target.value)}
+                          className="w-full text-[11px] py-1 px-1.5 bg-white border border-slate-200 rounded font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#008236] font-mono"
+                        />
+                      </div>
+                      <div>
+                        <span className="block text-[9px] font-bold text-slate-400 mb-0.5 uppercase tracking-wider">結束日期</span>
+                        <input
+                          type="date"
+                          value={endDate}
+                          onChange={(e) => setEndDate(e.target.value)}
+                          className="w-full text-[11px] py-1 px-1.5 bg-white border border-slate-200 rounded font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#008236] font-mono"
+                        />
+                      </div>
+                    </div>
+                    <div className="text-[10px] text-[#008236] font-bold bg-white/60 p-1 px-2 rounded border border-emerald-200 text-center mt-1">
+                      數據與 A4 報單已即時同步
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div>
@@ -471,7 +536,7 @@ export default function PdfExportModal({
                 {/* Date Header Row inside attachment */}
                 <div className="text-xs font-bold font-sans text-slate-800 flex items-center gap-1 border-b border-dashed border-slate-200 pb-1.5">
                   <span>申報對帳期間：</span>
-                  <span className="font-mono bg-slate-100 px-2 py-0.5 rounded text-slate-650">{reportDate}</span>
+                  <span className="font-mono bg-slate-100 px-2 py-0.5 rounded text-slate-650">{displayPeriod}</span>
                 </div>
 
                 {/* Second Table: Attendee List */}
@@ -646,7 +711,7 @@ export default function PdfExportModal({
 
               {/* Date Range Row */}
               <div className="text-[11px] font-bold text-black border-b border-dashed border-gray-300 pb-1.5">
-                申報對帳期間：{reportDate}
+                申報對帳期間：{displayPeriod}
               </div>
 
               {/* Printable High-Fidelity Attendee table */}
