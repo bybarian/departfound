@@ -12,12 +12,21 @@ export default function ReceiptScanner({ onAddRecord, onAutoFillForm, currentYea
   // Passcode security checks
   const [isUnlocked, setIsUnlocked] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('ocr_unlocked') === 'true';
+      return localStorage.getItem('ocr_unlocked') === 'true' || !!localStorage.getItem('client_gemini_api_key');
     }
     return false;
   });
   const [passcode, setPasscode] = useState('');
   const [passcodeError, setPasscodeError] = useState('');
+
+  // Client-side Custom Gemini API Key configuration for static hosts (e.g. GitHub Pages)
+  const [clientApiKey, setClientApiKey] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('client_gemini_api_key') || '';
+    }
+    return '';
+  });
+  const [showKeyConfig, setShowKeyConfig] = useState<boolean>(false);
 
   // Mode selection or capture options
   const [isCameraActive, setIsCameraActive] = useState(false);
@@ -188,15 +197,104 @@ export default function ReceiptScanner({ onAddRecord, onAutoFillForm, currentYea
     reader.readAsDataURL(file);
   };
 
+  // Direct Browser-to-API Gemini OCR helper (for static hosts like GitHub Pages with no active Node backend server)
+  const callGeminiDirectly = async (base64StringWithPrefix: string, apiKey: string) => {
+    let mimeType = "image/jpeg";
+    let base64Data = base64StringWithPrefix;
+    const match = base64StringWithPrefix.match(/^data:(image\/[a-zA-Z+.-]+);base64,(.+)$/);
+    if (match) {
+      mimeType = match[1];
+      base64Data = match[2];
+    }
+
+    const modelsToTry = ["gemini-2.5-flash", "gemini-1.5-flash"];
+    let lastError: any = null;
+
+    for (const modelName of modelsToTry) {
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+        const payload = {
+          contents: [
+            {
+              parts: [
+                {
+                  inlineData: {
+                    mimeType,
+                    data: base64Data
+                  }
+                },
+                {
+                  text: "請辨識此發票或收據影像中的消費日期、消費類別、總金額及簡短備註。日期的格式請轉換為 YYYY-MM-DD，若找不到正確日期則默認今天。類別必須嚴格分類為：'會議餐點'、'電腦周邊'、'文具用品' 或 '其他'。金額請提供整數。備註請提取買了什麼主要品項或商家店名。"
+                }
+              ]
+            }
+          ],
+          generationConfig: {
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: "OBJECT",
+              properties: {
+                date: { 
+                  type: "STRING", 
+                  description: "消費日期，格式必須是 YYYY-MM-DD" 
+                },
+                category: { 
+                  type: "STRING", 
+                  description: "消費類別，只能是：'會議餐點', '電腦周邊', '文具用品', '其他' 之一" 
+                },
+                amount: { 
+                  type: "INTEGER", 
+                  description: "消費總金額 (新台幣)，為大於 0 的整數數字" 
+                },
+                remark: { 
+                  type: "STRING", 
+                  description: "備註說明，描述商家店名與買了什麼品項" 
+                }
+              },
+              required: ["date", "category", "amount", "remark"]
+            }
+          }
+        };
+
+        const response = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+          const errText = await response.text();
+          throw new Error(`Gemini API 回應狀態錯誤 ${response.status}: ${errText}`);
+        }
+
+        const resJson = await response.json();
+        const rawText = resJson?.candidates?.[0]?.content?.parts?.[0]?.text;
+        
+        if (!rawText) {
+          throw new Error("Gemini AI 回應格式中未包含分析文字");
+        }
+
+        return JSON.parse(rawText.trim());
+      } catch (err) {
+        console.warn(`Direct call failed for ${modelName}:`, err);
+        lastError = err;
+      }
+    }
+
+    throw lastError || new Error("無法與 Google Gemini API 建立通訊。請確認您的 API Key 是否正確。");
+  };
+
   // Perform Gemini OCR API fetch request
   const performOCR = async (base64String: string) => {
     setIsScanning(true);
-    setStatusText('1/3 建立伺服器連線中...');
+    setStatusText('1/3 建立服務連線中...');
     setErrorMsg('');
     
     // Stagger loading indicators to look high-end and detailed
     const texts = [
-      '1/3 伺服器已建立安全連線...',
+      '1/3 已準備就緒，啟動辨識通道...',
       '2/3 Gemini AI 正在對發票進行 OCR 文字及欄位視覺辨識...',
       '3/3 核心元數據校準，自動填補消費日期與分類...',
       '常規審核中，即將呈現辨識結果...'
@@ -209,23 +307,51 @@ export default function ReceiptScanner({ onAddRecord, onAutoFillForm, currentYea
       }
     }, 1500);
 
+    const activeClientKey = clientApiKey || ((import.meta as any).env?.VITE_GEMINI_API_KEY as string) || '';
+    const isGithubOrStatic = typeof window !== 'undefined' && (
+      window.location.hostname.endsWith('github.io') || 
+      window.location.hostname.includes('github')
+    );
+
     try {
-      const response = await fetch('/api/ocr-receipt', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ image: base64String })
-      });
+      let data: any = null;
 
-      clearInterval(interval);
+      if (activeClientKey && (isGithubOrStatic || clientApiKey)) {
+        console.log("🚀 Static host or client-key detected: Performing direct browser-side Gemini OCR...");
+        setStatusText('2/3 正在使用瀏覽器端 API 金鑰進行直接本地安全性高智慧辨識...');
+        data = await callGeminiDirectly(base64String, activeClientKey);
+      } else {
+        // Regular backend fetch
+        console.log("🚀 Default mode: Sending request to Express backend API...");
+        const response = await fetch('/api/ocr-receipt', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ image: base64String })
+        });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "發票資訊辨識失敗");
+        // Check if the response matches HTML (suggesting SPA router fallback/404 on static server)
+        const contentType = response.headers.get("Content-Type") || "";
+        if (!response.ok || contentType.includes("html")) {
+          if (contentType.includes("html") && isGithubOrStatic) {
+            throw new Error("DET_STATIC_HOST_ERROR");
+          }
+          
+          let errMsg = "發票資訊辨識失敗";
+          try {
+            const errorData = await response.json();
+            errMsg = errorData.error || errMsg;
+          } catch (e) {
+            errMsg = `伺服器回應格式錯誤 (${response.status})。由於本系統部署在 GitHub Pages 等靜態伺服器，無法運行後端 API 路由。請點擊下方展開「⚙️ 靜態運行（GitHub Pages）專用設定」並填入您個人的 Gemini API Key 以啟用完整辨識！`;
+          }
+          throw new Error(errMsg);
+        }
+
+        data = await response.json();
       }
 
-      const data = await response.json();
+      clearInterval(interval);
       
       // Auto-populate edit form with scanned results
       setScannedDate(data.date || `${currentYear}-01-01`);
@@ -238,7 +364,13 @@ export default function ReceiptScanner({ onAddRecord, onAutoFillForm, currentYea
     } catch (err: any) {
       clearInterval(interval);
       console.error(err);
-      setErrorMsg(err.message || '發票掃描失敗，請手動確認或於 ⚙️ 設定 > 密鑰 中設置正確的 Gemini 服務 API Key。');
+      
+      if (err.message === "DET_STATIC_HOST_ERROR" || err.message?.includes("Unexpected token '<'") || err.message?.includes("is not valid JSON")) {
+        setErrorMsg("⚠️ 偵測到本項目運行於 GitHub Pages 靜態伺服器 (不支援 Node.js 後端 API 服務，因此向 /api 發送的請求返回了 index.html 網頁而非 JSON 數據)。\n\n💡 解決方案：\n請在下方展開「⚙️ 靜態運行 (GitHub Pages) 專用設定」並填入您個人的免費 Gemini API Key，即可免除伺服器限制，於網頁端安全、完美運行 AI 辨識！");
+        setShowKeyConfig(true);
+      } else {
+        setErrorMsg(err.message || '發票掃描失敗，請手動確認或於下方「⚙️ 靜態運行 (GitHub Pages) 專用設定」中設置正確的 Gemini 服務 API Key。');
+      }
     } finally {
       setIsScanning(false);
     }
@@ -322,6 +454,17 @@ export default function ReceiptScanner({ onAddRecord, onAutoFillForm, currentYea
           {isUnlocked && (
             <button
               type="button"
+              onClick={() => setShowKeyConfig(!showKeyConfig)}
+              className="text-[10px] sm:text-xs font-semibold text-slate-100 hover:text-white bg-white/10 hover:bg-white/20 px-2 py-1 rounded border border-white/20 transition-colors cursor-pointer flex items-center gap-1"
+              title="設定自備 API 金鑰"
+            >
+              <span>⚙️ {clientApiKey ? '自備金鑰已啟用' : '靜態設定'}</span>
+            </button>
+          )}
+
+          {isUnlocked && (
+            <button
+              type="button"
               onClick={handleLockScanner}
               title="重新鎖定 AI 辨識"
               className="text-[10px] sm:text-xs font-semibold text-rose-200 hover:text-white bg-rose-950/20 hover:bg-rose-900/40 px-2 py-1 rounded border border-rose-800/30 transition-colors cursor-pointer flex items-center gap-1"
@@ -387,6 +530,69 @@ export default function ReceiptScanner({ onAddRecord, onAutoFillForm, currentYea
             <div className="text-[10px] text-slate-400 font-medium pt-2 border-t border-slate-200/50">
               💡 應系統安全限制，若需獲取此解鎖密碼請洽您的協辦或系統管理人員。
             </div>
+
+            {/* Static host / GitHub Pages config toggle inside locked state */}
+            <div className="pt-3 border-t border-slate-200/40 text-center space-y-2">
+              <button
+                type="button"
+                onClick={() => setShowKeyConfig(!showKeyConfig)}
+                className="text-[10px] sm:text-xs font-bold text-[#008236] hover:text-[#006228] transition-colors inline-flex items-center gap-1 border border-emerald-200 bg-white hover:bg-emerald-50/50 px-2.5 py-1 rounded-md cursor-pointer"
+              >
+                <span>⚙️ 靜態運行 / 自備 API 金鑰設定 (GitHub Pages 專用)</span>
+              </button>
+              
+              {showKeyConfig && (
+                <div className="p-3 bg-emerald-50/40 border border-emerald-100 rounded-lg space-y-2 text-left animate-fade-in max-w-sm mx-auto">
+                  <p className="text-[10px] text-slate-600 font-semibold leading-relaxed">
+                    💡 <b>靜態主機專用：</b>由於 GitHub Pages 等靜態主機不支援後端 Node.js API，此時您必須提供自己的 API 金鑰在瀏覽器端直連解析。您的金鑰會安全存放在您本機瀏覽器中，安全絕不外流。
+                  </p>
+                  <div className="flex gap-1.5 pt-1">
+                    <input
+                      type="password"
+                      value={clientApiKey}
+                      onChange={(e) => setClientApiKey(e.target.value)}
+                      placeholder="請貼上您的 Gemini API Key (AIzaSy...)"
+                      className="w-full text-[10px] py-1.5 px-2 bg-white border border-slate-300 rounded font-mono focus:border-[#008236] focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (clientApiKey.trim()) {
+                          localStorage.setItem('client_gemini_api_key', clientApiKey.trim());
+                          setIsUnlocked(true);
+                          setSuccessInfo('🔑 已儲存自備 API 金鑰並成功啟用辨識模組！');
+                          setShowKeyConfig(false);
+                        } else {
+                          localStorage.removeItem('client_gemini_api_key');
+                          setClientApiKey('');
+                        }
+                      }}
+                      className="bg-[#008236] text-white text-[10px] font-extrabold px-3 py-1.5 rounded hover:bg-[#006228] transition-colors cursor-pointer shrink-0"
+                    >
+                      儲存金鑰
+                    </button>
+                  </div>
+                  <div className="text-[9px] text-[#008236] font-bold flex justify-between items-center pt-1 border-t border-slate-200/50">
+                    <a href="https://aistudio.google.com/" target="_blank" rel="noopener noreferrer" className="underline hover:text-emerald-700">
+                      👉 點此免費向 Google 取得金鑰
+                    </a>
+                    {clientApiKey && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          localStorage.removeItem('client_gemini_api_key');
+                          setClientApiKey('');
+                          setIsUnlocked(false);
+                        }}
+                        className="text-rose-600 underline hover:text-rose-800 ml-2"
+                      >
+                        清除金鑰
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         ) : (
           <>
@@ -402,6 +608,65 @@ export default function ReceiptScanner({ onAddRecord, onAutoFillForm, currentYea
               <div className="p-3 bg-emerald-50 text-[#008236] text-[11px] font-bold rounded border border-emerald-100 flex items-start gap-1.5">
                 <CheckCircle2 className="w-4 h-4 text-[#008236] shrink-0 mt-0.5" />
                 <span className="leading-snug">{successInfo}</span>
+              </div>
+            )}
+
+            {/* Static host / GitHub Pages config toggle inside unlocked state */}
+            {showKeyConfig && (
+              <div className="p-3 bg-emerald-50/50 border border-emerald-250 rounded-lg space-y-2 animate-fade-in text-[11px] text-slate-700 leading-normal">
+                <div className="font-bold text-[#008236] flex justify-between items-center">
+                  <span>⚙️ 靜態運行 / 自備金鑰本地端辨識設定</span>
+                  <button type="button" onClick={() => setShowKeyConfig(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                <p className="text-[10px] text-slate-600 leading-relaxed">
+                  託管於 GitHub Pages 等靜態主機不支援後端 `/api`，請填入您個人的 Gemini API Key，系統將安全切換至網頁端直接呼叫解析：
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    type="password"
+                    value={clientApiKey}
+                    onChange={(e) => setClientApiKey(e.target.value)}
+                    placeholder="請貼上您的 Gemini API Key (AIzaSy...)"
+                    className="w-full text-xs font-mono py-1.5 px-2 bg-white border border-slate-300 rounded focus:border-[#008236] focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (clientApiKey.trim()) {
+                        localStorage.setItem('client_gemini_api_key', clientApiKey.trim());
+                        setSuccessInfo('🔑 自備金鑰已變更成功並完全儲存！');
+                        setShowKeyConfig(false);
+                      } else {
+                        localStorage.removeItem('client_gemini_api_key');
+                        setClientApiKey('');
+                        setSuccessInfo('已移除自備金鑰，系統將恢復默認使用後端 API。');
+                      }
+                    }}
+                    className="bg-[#008236] hover:bg-[#006228] text-white text-[10px] font-bold px-3 py-1.5 rounded shrink-0 cursor-pointer"
+                  >
+                    儲存
+                  </button>
+                </div>
+                <div className="text-[9px] font-semibold flex justify-between items-center text-slate-400 pt-1 border-t border-slate-200/50">
+                  <a href="https://aistudio.google.com/" target="_blank" rel="noopener noreferrer" className="underline text-[#008236] hover:text-[#006228]">
+                    👉 點此前往獲取免費金鑰
+                  </a>
+                  {clientApiKey && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        localStorage.removeItem('client_gemini_api_key');
+                        setClientApiKey('');
+                        setSuccessInfo('自備金鑰已完全清除。');
+                      }}
+                      className="text-rose-600 underline hover:text-rose-800 font-bold"
+                    >
+                      清除金鑰
+                    </button>
+                  )}
+                </div>
               </div>
             )}
 
