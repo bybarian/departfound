@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Printer, FileText, Settings, Calendar, CheckSquare, Sparkles } from 'lucide-react';
+import { X, Printer, FileText, Settings, Calendar, CheckSquare, Sparkles, FileDown } from 'lucide-react';
 import { ExpenseRecord, AttendeeDetail } from '../types';
 
 interface PdfExportModalProps {
@@ -108,6 +108,283 @@ export default function PdfExportModal({
       alert("因瀏覽器安全限制，請點擊左側控制面板的「在新分頁中開啟」，即可正常列印！");
     }
   };
+
+  const handleExportWord = () => {
+    let htmlContent = `
+<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+<head>
+<meta charset="utf-8">
+<title>${docTitle || '費用報支單'}</title>
+<!--[if gte mso 9]>
+<xml>
+ <w:WordDocument>
+  <w:View>Print</w:View>
+  <w:Zoom>100</w:Zoom>
+  <w:DoNotOptimizeForBrowser/>
+ </w:WordDocument>
+</xml>
+<![endif]-->
+<style>
+  body {
+    font-family: "Microsoft JhengHei", "微軟正黑體", sans-serif;
+    line-height: 1.6;
+    font-size: 11pt;
+    color: #000000;
+  }
+  .title {
+    text-align: center;
+    font-size: 20pt;
+    font-weight: bold;
+    margin-top: 10px;
+    margin-bottom: 25px;
+    letter-spacing: 2px;
+  }
+  .meta-table {
+    width: 100%;
+    margin-bottom: 15px;
+    font-size: 11pt;
+    font-weight: bold;
+  }
+  .meta-table td {
+    border: none;
+    padding: 4px 0;
+  }
+  table.data-table {
+    border-collapse: collapse;
+    width: 100%;
+    margin-bottom: 25px;
+  }
+  table.data-table th {
+    background-color: #008236;
+    color: #ffffff;
+    font-weight: bold;
+    border: 1px solid #000000;
+    padding: 10px 8px;
+    text-align: center;
+    font-size: 11pt;
+  }
+  table.data-table td {
+    border: 1px solid #000000;
+    padding: 8px;
+    font-size: 10.5pt;
+  }
+  .text-center { text-align: center; }
+  .text-right { text-align: right; }
+  .text-left { text-align: left; }
+  .font-bold { font-weight: bold; }
+  .attachment-title {
+    text-align: center;
+    font-size: 14pt;
+    font-weight: bold;
+    letter-spacing: 5px;
+    margin-top: 35px;
+    margin-bottom: 15px;
+  }
+  .checkbox-group {
+    border-bottom: 1px solid #000000;
+    padding-bottom: 8px;
+    margin-bottom: 10px;
+    font-size: 10.5pt;
+    font-weight: bold;
+  }
+  .period-info {
+    border-bottom: 1px dashed #cccccc;
+    padding-bottom: 6px;
+    margin-bottom: 15px;
+    font-size: 10.5pt;
+    font-weight: bold;
+  }
+  .sign-section {
+    width: 100%;
+    margin-top: 20px;
+    margin-bottom: 20px;
+    font-size: 11pt;
+    font-weight: bold;
+  }
+  .sign-section td {
+    border: none;
+    padding: 5px 0;
+  }
+  .footer {
+    margin-top: 40px;
+    border-top: 1px solid #eeeeee;
+    padding-top: 8px;
+    font-size: 9pt;
+    color: #666666;
+    font-style: italic;
+  }
+  .page-break {
+    page-break-before: always;
+  }
+</style>
+</head>
+<body>
+    `;
+
+    if (exportMode === 'both' || exportMode === 'records') {
+      htmlContent += `
+        <div class="title">${docTitle || '科基金費用報支單'}</div>
+        
+        <table class="meta-table">
+          <tr>
+            <td class="text-left">使用單位：${department}</td>
+            <td class="text-right">日期：${reportDate}</td>
+          </tr>
+        </table>
+
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th style="width: 30%;">項目</th>
+              <th style="width: 30%;">摘要</th>
+              <th style="width: 15%; text-align: right; font-weight: bold;">金 額</th>
+              <th style="width: 25%;">付款人(姓名+員工編號)</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+
+      if (sortedRecords.length === 0) {
+        htmlContent += `
+          <tr>
+            <td colspan="4" class="text-center" style="padding: 30px; color: #888888;">目前尚無任何消費報支。</td>
+          </tr>
+        `;
+      } else {
+        sortedRecords.forEach((r) => {
+          htmlContent += `
+            <tr>
+              <td class="text-left font-bold" style="padding-left: 10px;">${r.category}(${getShortDate(r.date)})</td>
+              <td class="text-left">${includeRemarks ? r.remark : ''}</td>
+              <td class="text-right font-bold" style="padding-right: 15px;">${r.amount.toLocaleString()}</td>
+              <td class="text-center font-bold">${reporter}${reporterEmpId ? `(${reporterEmpId})` : ''}</td>
+            </tr>
+          `;
+        });
+      }
+
+      htmlContent += `
+            <tr class="font-bold" style="background-color: #f9f9f9;">
+              <td colspan="2" class="text-center" style="letter-spacing: 1.5em; padding-left: 2em;">總 計</td>
+              <td class="text-right font-bold" style="padding-right: 15px;">${totalAmount.toLocaleString()}</td>
+              <td></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <table class="sign-section">
+          <tr>
+            <td class="text-left">科室主管：${checker || '________________'}</td>
+            <td class="text-right" style="padding-right: 20px;">製單：${reporter}</td>
+          </tr>
+        </table>
+      `;
+    }
+
+    if (exportMode === 'both') {
+      htmlContent += `<div class="page-break"></div>`;
+    }
+
+    if (exportMode === 'both' || exportMode === 'attendees') {
+      const activeConfs = [
+        morningConf ? '■ 晨會' : '□ 晨會',
+        deptMealConf ? '■ 科內餐會' : '□ 科內餐會',
+        caseDiscussConf ? '■ 病例討論會' : '□ 病例討論會',
+        caseStudyConf ? '■ 個案討論會' : '□ 個案討論會',
+        teachingConf ? '■ 教學活動' : '□ 教學活動',
+        otherConf ? '■ 其他' : '□ 其他'
+      ].filter(Boolean).join('    ');
+
+      htmlContent += `
+        <div class="attachment-title">附 件：與 會 人 員 明 細 表</div>
+
+        <div style="border: 1px solid #000000; padding: 15px;">
+          <div class="checkbox-group">
+            會議類型： ${activeConfs}
+          </div>
+
+          <div class="period-info">
+            申報對帳期間：${displayPeriod}
+          </div>
+
+          <table class="data-table" style="margin-bottom: 0;">
+            <thead>
+              <tr>
+                <th style="width: 10%;">日期</th>
+                <th style="width: 15%;">報支項目</th>
+                <th style="width: 45%; text-align: left;">與會人員名單</th>
+                <th style="width: 10%;">人數</th>
+                <th style="width: 10%; text-align: right; font-weight: bold;">平均金額</th>
+                <th style="width: 10%; text-align: right; font-weight: bold;">細項總計</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+
+      if (sortedDetails.length === 0) {
+        htmlContent += `
+          <tr>
+            <td colspan="6" class="text-center" style="padding: 30px; color: #888888;">目前尚無任何與會細項紀錄。</td>
+          </tr>
+        `;
+      } else {
+        sortedDetails.forEach((detail) => {
+          htmlContent += `
+            <tr>
+              <td class="text-center">${getShortDate(detail.date)}</td>
+              <td class="text-center font-bold">${detail.category}</td>
+              <td class="text-left" style="padding-left: 10px;">${detail.attendees.join('、')}</td>
+              <td class="text-center font-bold">${detail.count}人</td>
+              <td class="text-right" style="padding-right: 10px;">$${detail.average.toLocaleString()}</td>
+              <td class="text-right font-bold" style="padding-right: 10px;">$${detail.amount.toLocaleString()}</td>
+            </tr>
+          `;
+        });
+      }
+
+      const totalAttendeeCount = sortedDetails.reduce((sum, d) => sum + d.count, 0);
+
+      htmlContent += `
+              <tr class="font-bold" style="background-color: #f9f9f9;">
+                <td colspan="3" class="text-center" style="letter-spacing: 1em; padding-left: 2em;">與 會 人 員 及 金 額 總 計</td>
+                <td class="text-center">${totalAttendeeCount} 人次</td>
+                <td></td>
+                <td class="text-right" style="padding-right: 10px;">$${totalAmount.toLocaleString()}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    htmlContent += `
+      <table class="footer" style="width: 100%;">
+        <tr>
+          <td class="text-left" style="border: none;">powered by byabrian 2026 copyrights reserved</td>
+          <td class="text-right" style="border: none;">智慧人員不重複抽選防錯機制申報存卷審驗 · Document System ID: CF-AUTO-STAMP-2026</td>
+        </tr>
+      </table>
+    </body>
+    </html>
+    `;
+
+    // Download the blob as a rich .doc Word document
+    const blob = new Blob([htmlContent], { type: 'application/msword;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    
+    // Build file name
+    const sanitizedTitle = (docTitle || '科基金費用報支單').replace(/[\\/:*?"<>|]/g, '_');
+    const cleanPeriod = displayPeriod.replace(/[\/~: *?"<>|]/g, '_');
+    link.download = `${sanitizedTitle}_${cleanPeriod}.doc`;
+    
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
 
   return (
     <div id="pdf-export-overlay" className="fixed inset-0 z-[9999] flex items-center justify-center p-2 sm:p-4 bg-slate-900/70 backdrop-blur-xs overflow-y-auto">
@@ -399,6 +676,14 @@ export default function PdfExportModal({
             >
               <Printer className="w-4 h-4 text-emerald-250" />
               <span>列印 / 另存 A4 報支 PDF</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleExportWord}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-4 rounded-lg inline-flex items-center justify-center gap-2 shadow-md cursor-pointer transition-colors text-xs"
+            >
+              <FileDown className="w-4 h-4 text-blue-200" />
+              <span>匯出可編輯 Word 檔案 (.doc)</span>
             </button>
             <button
               type="button"
