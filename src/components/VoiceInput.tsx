@@ -25,10 +25,23 @@ export default function VoiceInput({ onAddRecord, currentYear, onAutoFillForm }:
 
   // Editable parsed preview fields
   const [parsedDate, setParsedDate] = useState('');
-  const [parsedCategory, setParsedCategory] = useState<ExpenseCategory>('會議餐點');
+  const [parsedDropdownCategory, setParsedDropdownCategory] = useState<'會議餐點' | '電腦周邊' | '文具用品' | '其他'>('會議餐點');
+  const [parsedCustomCategory, setParsedCustomCategory] = useState('');
+  const parsedCategory = parsedDropdownCategory === '其他' ? (parsedCustomCategory.trim() || '其他') : parsedDropdownCategory;
   const [parsedAmount, setParsedAmount] = useState<number | ''>('');
   const [parsedRemark, setParsedRemark] = useState('');
   const [showPreview, setShowPreview] = useState(false);
+
+  const updateParsedCategoryStates = (categoryVal: string) => {
+    const isStandard = ['會議餐點', '電腦周邊', '文具用品'].includes(categoryVal);
+    if (isStandard) {
+      setParsedDropdownCategory(categoryVal as any);
+      setParsedCustomCategory('');
+    } else {
+      setParsedDropdownCategory('其他');
+      setParsedCustomCategory(categoryVal);
+    }
+  };
 
   const recognitionRef = useRef<any>(null);
   const voiceModeRef = useRef(voiceMode);
@@ -129,7 +142,7 @@ export default function VoiceInput({ onAddRecord, currentYear, onAutoFillForm }:
       if (!parsedDateVal || !parsedAmountVal || parsedAmountVal <= 0) {
         // Fallback to preview if critical info is missing
         setParsedDate(parsedDateVal);
-        setParsedCategory(parsedCategoryVal);
+        updateParsedCategoryStates(parsedCategoryVal);
         setParsedAmount(parsedAmountVal || '');
         setParsedRemark(parsedRemarkVal);
         setShowPreview(true);
@@ -162,7 +175,7 @@ export default function VoiceInput({ onAddRecord, currentYear, onAutoFillForm }:
       } else {
         // Fallback to preview if parent callback is missing
         setParsedDate(parsedDateVal);
-        setParsedCategory(parsedCategoryVal);
+        updateParsedCategoryStates(parsedCategoryVal);
         setParsedAmount(parsedAmountVal || '');
         setParsedRemark(parsedRemarkVal);
         setShowPreview(true);
@@ -170,7 +183,7 @@ export default function VoiceInput({ onAddRecord, currentYear, onAutoFillForm }:
     } else {
       // Classic preview mode
       setParsedDate(parsedDateVal);
-      setParsedCategory(parsedCategoryVal);
+      updateParsedCategoryStates(parsedCategoryVal);
       setParsedAmount(parsedAmountVal || '');
       setParsedRemark(parsedRemarkVal);
       setShowPreview(true);
@@ -369,8 +382,8 @@ export default function VoiceInput({ onAddRecord, currentYear, onAutoFillForm }:
                       消費類別
                     </label>
                     <select
-                      value={parsedCategory}
-                      onChange={(e) => setParsedCategory(e.target.value as ExpenseCategory)}
+                      value={parsedDropdownCategory}
+                      onChange={(e) => setParsedDropdownCategory(e.target.value as any)}
                       className="geo-input"
                     >
                       <option value="會議餐點">會議餐點 (約每人500)</option>
@@ -378,6 +391,19 @@ export default function VoiceInput({ onAddRecord, currentYear, onAutoFillForm }:
                       <option value="文具用品">文具用品 (預設1-3人)</option>
                       <option value="其他">其他 (自行指定)</option>
                     </select>
+
+                    {parsedDropdownCategory === '其他' && (
+                      <div className="mt-2 animate-fade-in">
+                        <input
+                          type="text"
+                          value={parsedCustomCategory}
+                          onChange={(e) => setParsedCustomCategory(e.target.value)}
+                          placeholder="請輸入自訂消費項目名稱"
+                          className="geo-input text-xs"
+                          required
+                        />
+                      </div>
+                    )}
                   </div>
   
                   {/* Remark */}

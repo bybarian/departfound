@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Tag, DollarSign, FileText, Plus, Check, X, Users } from 'lucide-react';
+import { Calendar, Tag, DollarSign, FileText, Plus, Check, X, Users, Sparkles } from 'lucide-react';
 import { AttendeeDetail, ExpenseCategory, ExpenseRecord, Person } from '../types';
 import { estimateAttendeeCount } from '../utils/attendeeReroll';
 
@@ -29,11 +29,14 @@ export default function ExpenseForm({
   mealUnitCost,
 }: ExpenseFormProps) {
   const [date, setDate] = useState('');
-  const [category, setCategory] = useState<ExpenseCategory>('會議餐點');
+  const [dropdownCategory, setDropdownCategory] = useState<'會議餐點' | '電腦周邊' | '文具用品' | '其他'>('會議餐點');
+  const [customCategory, setCustomCategory] = useState('');
   const [amount, setAmount] = useState<number | ''>('');
   const [remark, setRemark] = useState('');
   const [isHighlighted, setIsHighlighted] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+
+  const category = dropdownCategory === '其他' ? (customCategory.trim() || '其他') : dropdownCategory;
 
   // Settle custom attendee count modes
   const [useAutoCount, setUseAutoCount] = useState(true);
@@ -50,7 +53,14 @@ export default function ExpenseForm({
     setErrorMsg('');
     if (editTarget) {
       setDate(editTarget.date);
-      setCategory(editTarget.category);
+      const isStandard = ['會議餐點', '電腦周邊', '文具用品'].includes(editTarget.category);
+      if (isStandard) {
+        setDropdownCategory(editTarget.category as any);
+        setCustomCategory('');
+      } else {
+        setDropdownCategory('其他');
+        setCustomCategory(editTarget.category);
+      }
       setAmount(editTarget.amount);
       setRemark(editTarget.remark);
 
@@ -73,7 +83,8 @@ export default function ExpenseForm({
       const mm = String(today.getMonth() + 1).padStart(2, '0');
       const dd = String(today.getDate()).padStart(2, '0');
       setDate(`${currentYear || '2026'}-${mm}-${dd}`);
-      setCategory('會議餐點');
+      setDropdownCategory('會議餐點');
+      setCustomCategory('');
       setAmount('');
       setRemark('');
       setUseAutoCount(true);
@@ -86,7 +97,14 @@ export default function ExpenseForm({
     setErrorMsg('');
     if (autoFillData) {
       setDate(autoFillData.date);
-      setCategory(autoFillData.category);
+      const isStandard = ['會議餐點', '電腦周邊', '文具用品'].includes(autoFillData.category);
+      if (isStandard) {
+        setDropdownCategory(autoFillData.category as any);
+        setCustomCategory('');
+      } else {
+        setDropdownCategory('其他');
+        setCustomCategory(autoFillData.category);
+      }
       setAmount(autoFillData.amount);
       setRemark(autoFillData.remark);
       
@@ -113,6 +131,10 @@ export default function ExpenseForm({
       setErrorMsg('請填寫消費日期！');
       return;
     }
+    if (dropdownCategory === '其他' && !customCategory.trim()) {
+      setErrorMsg('請輸入自訂消費項目名稱！');
+      return;
+    }
     if (amount === '' || amount <= 0) {
       setErrorMsg('請填寫消費金額！');
       return;
@@ -136,7 +158,8 @@ export default function ExpenseForm({
     }
 
     // Reset inputs
-    setCategory('會議餐點');
+    setDropdownCategory('會議餐點');
+    setCustomCategory('');
     setAmount('');
     setRemark('');
     setUseAutoCount(true);
@@ -197,8 +220,8 @@ export default function ExpenseForm({
           </label>
           <select
             id="select-expense-category"
-            value={category}
-            onChange={(e) => setCategory(e.target.value as ExpenseCategory)}
+            value={dropdownCategory}
+            onChange={(e) => setDropdownCategory(e.target.value as any)}
             className="geo-input bg-white"
           >
             <option value="會議餐點">☕ 會議餐點 (預估每人 $500)</option>
@@ -207,6 +230,25 @@ export default function ExpenseForm({
             <option value="其他">❓ 其他 (手動指定)</option>
           </select>
         </div>
+
+        {/* Custom Category Input */}
+        {dropdownCategory === '其他' && (
+          <div className="animate-fade-in">
+            <label className="block text-[10px] font-bold text-slate-500 mb-1 flex items-center gap-1 uppercase tracking-wider">
+              <Sparkles className="w-3 h-3 text-[#008236]" />
+              請輸入自訂消費項目名稱
+            </label>
+            <input
+              type="text"
+              id="input-custom-category"
+              value={customCategory}
+              onChange={(e) => setCustomCategory(e.target.value)}
+              placeholder="例如：高鐵車票、計程車費、印刷費..."
+              className="geo-input"
+              required
+            />
+          </div>
+        )}
 
         {/* Amount Input */}
         <div>

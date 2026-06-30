@@ -35,6 +35,7 @@ export default function App() {
   // Core States
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [isFirestoreOffline, setIsFirestoreOffline] = useState(false);
   const [people, setPeople] = useState<Person[]>([]);
   const [records, setRecords] = useState<ExpenseRecord[]>([]);
   const [details, setDetails] = useState<AttendeeDetail[]>([]);
@@ -178,8 +179,53 @@ export default function App() {
           localStorage.setItem('tech_fund_details_v2', JSON.stringify(fetchedDetails));
           localStorage.setItem('tech_fund_meal_cost', String(fetchedCost));
         }
+        setIsFirestoreOffline(false);
       } catch (error) {
-        handleFirestoreError(error, OperationType.GET, `users/${uid}`);
+        console.warn('Firestore load failed (offline or network policy). Falling back to local offline backup:', error);
+        setIsFirestoreOffline(true);
+
+        // Offline mode fallback to standard localStorage settings
+        const localPeople = localStorage.getItem('tech_fund_people_v2');
+        let loadedPeople: Person[] = [];
+        if (localPeople) {
+          try {
+            loadedPeople = JSON.parse(localPeople);
+            setPeople(loadedPeople);
+          } catch (e) {
+            loadedPeople = loadDefaultPeople();
+            setPeople(loadedPeople);
+          }
+        } else {
+          loadedPeople = loadDefaultPeople();
+          setPeople(loadedPeople);
+        }
+
+        let currentMealCost = 500;
+        const localCost = localStorage.getItem('tech_fund_meal_cost');
+        if (localCost) {
+          currentMealCost = parseInt(localCost, 10);
+          setMealUnitCost(currentMealCost);
+        }
+
+        const localRecords = localStorage.getItem('tech_fund_records_v2');
+        const localDetails = localStorage.getItem('tech_fund_details_v2');
+
+        if (localRecords && localDetails) {
+          try {
+            setRecords(JSON.parse(localRecords));
+            setDetails(JSON.parse(localDetails));
+          } catch (e) {
+            const seedRecs = loadDefaultRecords();
+            const seedDetails = loadDefaultDetails(seedRecs, loadedPeople, currentMealCost);
+            setRecords(seedRecs);
+            setDetails(seedDetails);
+          }
+        } else {
+          const seedRecs = loadDefaultRecords();
+          const seedDetails = loadDefaultDetails(seedRecs, loadedPeople, currentMealCost);
+          setRecords(seedRecs);
+          setDetails(seedDetails);
+        }
       }
     };
 
@@ -313,13 +359,13 @@ export default function App() {
     setPeople(updatedPeople);
     localStorage.setItem('tech_fund_people_v2', JSON.stringify(updatedPeople));
 
-    if (currentUser) {
+    if (currentUser && !isFirestoreOffline) {
       try {
         for (const p of updatedPeople) {
           await setDoc(doc(db, 'users', currentUser.uid, 'people', p.id), p);
         }
       } catch (error) {
-        handleFirestoreError(error, OperationType.WRITE, `users/${currentUser.uid}/people`);
+        console.warn('Failed to sync people to Firestore (offline or sandbox):', error);
       }
     }
   };
@@ -328,7 +374,7 @@ export default function App() {
     setConfirmModal({
       isOpen: true,
       title: '重設人員名單',
-      message: '確定要將人員名單重設回預設的 16 位成員嗎？(這將替換您當前的自訂成員與狀態設定)',
+      message: '確定要將人員名單重設回預設 of 16 位成員嗎？(這將替換您當前的自訂成員與狀態設定)',
       type: 'warning',
       confirmText: '確定重設',
       cancelText: '取消',
@@ -344,11 +390,11 @@ export default function App() {
     setMealUnitCost(val);
     localStorage.setItem('tech_fund_meal_cost', String(val));
 
-    if (currentUser) {
+    if (currentUser && !isFirestoreOffline) {
       try {
         await setDoc(doc(db, 'users', currentUser.uid, 'settings', 'general'), { mealUnitCost: val });
       } catch (error) {
-        handleFirestoreError(error, OperationType.WRITE, `users/${currentUser.uid}/settings/general`);
+        console.warn('Failed to sync settings to Firestore:', error);
       }
     }
   };
@@ -395,12 +441,12 @@ export default function App() {
     localStorage.setItem('tech_fund_records_v2', JSON.stringify(updatedRecords));
     localStorage.setItem('tech_fund_details_v2', JSON.stringify(updatedDetails));
 
-    if (currentUser) {
+    if (currentUser && !isFirestoreOffline) {
       try {
         await setDoc(doc(db, 'users', currentUser.uid, 'records', newRecord.id), newRecord);
         await setDoc(doc(db, 'users', currentUser.uid, 'details', newAttendeeDetail.id), newAttendeeDetail);
       } catch (error) {
-        handleFirestoreError(error, OperationType.CREATE, `users/${currentUser.uid}/records/${newRecord.id}`);
+        console.warn('Failed to sync new record to Firestore:', error);
       }
     }
   };
@@ -469,12 +515,12 @@ export default function App() {
 
     const updatedRecord = updatedRecords.find(r => r.id === id);
 
-    if (currentUser && updatedRecord && updatedDetail) {
+    if (currentUser && updatedRecord && updatedDetail && !isFirestoreOffline) {
       try {
         await setDoc(doc(db, 'users', currentUser.uid, 'records', id), updatedRecord);
         await setDoc(doc(db, 'users', currentUser.uid, 'details', id), updatedDetail);
       } catch (error) {
-        handleFirestoreError(error, OperationType.UPDATE, `users/${currentUser.uid}/records/${id}`);
+        console.warn('Failed to sync updated record to Firestore:', error);
       }
     }
 
@@ -506,12 +552,12 @@ export default function App() {
         localStorage.setItem('tech_fund_records_v2', JSON.stringify(remainingRecords));
         localStorage.setItem('tech_fund_details_v2', JSON.stringify(remainingDetails));
 
-        if (currentUser) {
+        if (currentUser && !isFirestoreOffline) {
           try {
             await deleteDoc(doc(db, 'users', currentUser.uid, 'records', id));
             await deleteDoc(doc(db, 'users', currentUser.uid, 'details', id));
           } catch (error) {
-            handleFirestoreError(error, OperationType.DELETE, `users/${currentUser.uid}/records/${id}`);
+            console.warn('Failed to delete record from Firestore:', error);
           }
         }
 
@@ -581,11 +627,11 @@ export default function App() {
     setDetails(updatedDetails);
     localStorage.setItem('tech_fund_details_v2', JSON.stringify(updatedDetails));
 
-    if (currentUser && updatedDetail) {
+    if (currentUser && updatedDetail && !isFirestoreOffline) {
       try {
         await setDoc(doc(db, 'users', currentUser.uid, 'details', id), updatedDetail);
       } catch (error) {
-        handleFirestoreError(error, OperationType.UPDATE, `users/${currentUser.uid}/details/${id}`);
+        console.warn('Failed to update rerolled details in Firestore:', error);
       }
     }
   };
@@ -613,11 +659,11 @@ export default function App() {
     setDetails(nextDetails);
     localStorage.setItem('tech_fund_details_v2', JSON.stringify(nextDetails));
 
-    if (currentUser && updatedDetail) {
+    if (currentUser && updatedDetail && !isFirestoreOffline) {
       try {
         await setDoc(doc(db, 'users', currentUser.uid, 'details', id), updatedDetail);
       } catch (error) {
-        handleFirestoreError(error, OperationType.UPDATE, `users/${currentUser.uid}/details/${id}`);
+        console.warn('Failed to update attendees in Firestore:', error);
       }
     }
   };
@@ -631,7 +677,7 @@ export default function App() {
     localStorage.setItem('tech_fund_details_v2', JSON.stringify(importedDetails));
     setEditTarget(null);
 
-    if (currentUser) {
+    if (currentUser && !isFirestoreOffline) {
       try {
         for (const r of importedRecords) {
           await setDoc(doc(db, 'users', currentUser.uid, 'records', r.id), r);
@@ -640,7 +686,7 @@ export default function App() {
           await setDoc(doc(db, 'users', currentUser.uid, 'details', d.id), d);
         }
       } catch (error) {
-        handleFirestoreError(error, OperationType.WRITE, `users/${currentUser.uid}`);
+        console.warn('Failed to sync imported database to Firestore:', error);
       }
     }
   };
@@ -765,9 +811,15 @@ export default function App() {
                     <span className="text-[10px] font-bold text-slate-800 leading-tight">
                       {currentUser.displayName || '使用者'}
                     </span>
-                    <span className="text-[8px] text-[#008236] font-semibold flex items-center gap-0.5 leading-none mt-0.5">
-                      ● 雲端已同步
-                    </span>
+                    {isFirestoreOffline ? (
+                      <span className="text-[8px] text-amber-600 font-semibold flex items-center gap-0.5 leading-none mt-0.5 animate-pulse" title="目前與 Firestore 伺服器連線中斷，已自動切換至本地快取安全備份模式，功能皆可正常運作">
+                        ▲ 離線備份模式
+                      </span>
+                    ) : (
+                      <span className="text-[8px] text-[#008236] font-semibold flex items-center gap-0.5 leading-none mt-0.5">
+                        ● 雲端已同步
+                      </span>
+                    )}
                   </div>
                   <button
                     type="button"

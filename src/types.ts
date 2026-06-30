@@ -1,4 +1,4 @@
-export type ExpenseCategory = '會議餐點' | '電腦周邊' | '文具用品' | '其他';
+export type ExpenseCategory = '會議餐點' | '電腦周邊' | '文具用品' | '其他' | (string & {});
 
 export interface ExpenseRecord {
   id: string; // Unique transaction identifier

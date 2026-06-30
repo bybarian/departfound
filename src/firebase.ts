@@ -1,10 +1,30 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
+import { 
+  getFirestore, 
+  initializeFirestore, 
+  persistentLocalCache, 
+  persistentMultipleTabManager,
+  doc, 
+  getDocFromServer 
+} from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+
+let firestoreDb;
+try {
+  firestoreDb = initializeFirestore(app, {
+    localCache: persistentLocalCache({
+      tabManager: persistentMultipleTabManager()
+    })
+  }, firebaseConfig.firestoreDatabaseId);
+} catch (e) {
+  console.warn('Could not initialize Firestore with persistent local cache (might be restricted in iframe). Falling back to memory cache:', e);
+  firestoreDb = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+}
+
+export const db = firestoreDb;
 export const auth = getAuth();
 
 // Test the connection to Firebase on initialization as requested by guidelines
@@ -14,9 +34,9 @@ async function testConnection() {
     console.log('Firebase Firestore connection tested successfully.');
   } catch (error) {
     if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.error('Please check your Firebase configuration: Client appears offline.');
+      console.warn('Please check your Firebase configuration: Client appears offline. Working in offline mode.');
     } else {
-      console.log('Firebase initialized (test request triggered).');
+      console.log('Firebase initialized (test connection attempt completed).');
     }
   }
 }

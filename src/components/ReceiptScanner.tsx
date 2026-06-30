@@ -38,7 +38,21 @@ export default function ReceiptScanner({ onAddRecord, onAutoFillForm, currentYea
 
   // Scanned / OCR results structure editable by user
   const [scannedDate, setScannedDate] = useState('');
-  const [scannedCategory, setScannedCategory] = useState<ExpenseCategory>('會議餐點');
+  const [scannedDropdownCategory, setScannedDropdownCategory] = useState<'會議餐點' | '電腦周邊' | '文具用品' | '其他'>('會議餐點');
+  const [scannedCustomCategory, setScannedCustomCategory] = useState('');
+  const scannedCategory = scannedDropdownCategory === '其他' ? (scannedCustomCategory.trim() || '其他') : scannedDropdownCategory;
+
+  const updateScannedCategoryStates = (categoryVal: string) => {
+    const isStandard = ['會議餐點', '電腦周邊', '文具用品'].includes(categoryVal);
+    if (isStandard) {
+      setScannedDropdownCategory(categoryVal as any);
+      setScannedCustomCategory('');
+    } else {
+      setScannedDropdownCategory('其他');
+      setScannedCustomCategory(categoryVal);
+    }
+  };
+
   const [scannedAmount, setScannedAmount] = useState<number | ''>('');
   const [scannedRemark, setScannedRemark] = useState('');
   const [showResultPanel, setShowResultPanel] = useState(false);
@@ -355,7 +369,7 @@ export default function ReceiptScanner({ onAddRecord, onAutoFillForm, currentYea
       
       // Auto-populate edit form with scanned results
       setScannedDate(data.date || `${currentYear}-01-01`);
-      setScannedCategory(data.category || '會議餐點');
+      updateScannedCategoryStates(data.category || '會議餐點');
       setScannedAmount(data.amount || '');
       setScannedRemark(data.remark || '');
       setShowResultPanel(true);
@@ -802,8 +816,8 @@ export default function ReceiptScanner({ onAddRecord, onAutoFillForm, currentYea
                   預設分類
                 </label>
                 <select
-                  value={scannedCategory}
-                  onChange={(e) => setScannedCategory(e.target.value as ExpenseCategory)}
+                  value={scannedDropdownCategory}
+                  onChange={(e) => setScannedDropdownCategory(e.target.value as any)}
                   className="w-full text-xs py-1.5 px-2.5 bg-white border border-slate-200 rounded-md font-bold text-slate-800 focus:border-[#008236] focus:outline-none focus:ring-0"
                 >
                   <option value="會議餐點">☕ 會議餐點</option>
@@ -811,6 +825,19 @@ export default function ReceiptScanner({ onAddRecord, onAutoFillForm, currentYea
                   <option value="文具用品">✏️ 文具用品</option>
                   <option value="其他">❓ 其他項目</option>
                 </select>
+
+                {scannedDropdownCategory === '其他' && (
+                  <div className="mt-2 animate-fade-in">
+                    <input
+                      type="text"
+                      value={scannedCustomCategory}
+                      onChange={(e) => setScannedCustomCategory(e.target.value)}
+                      placeholder="請輸入自訂消費項目名稱"
+                      className="w-full text-xs py-1.5 px-2.5 bg-white border border-slate-200 rounded-md font-bold text-slate-800 focus:border-[#008236] focus:outline-none focus:ring-0"
+                      required
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Amount Field */}
